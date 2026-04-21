@@ -10,13 +10,13 @@ project:
   top_module:  "tt_um_akim_tinydma"
   source_files:
     - "project.v"
-    - "tinyDMA/src/dma_pkg.sv"
-    - "tinyDMA/src/spi_master.sv"
-    - "tinyDMA/src/spi_psram_ctrl.sv"
-    - "tinyDMA/src/cfg_reg.sv"
-    - "tinyDMA/src/dma_scheduler.sv"
-    - "tinyDMA/src/dma_controller.sv"
-    - "tinyDMA/src/tinydma_top.sv"
+    - "dma_pkg.sv"
+    - "spi_master.sv"
+    - "spi_psram_ctrl.sv"
+    - "cfg_reg.sv"
+    - "dma_scheduler.sv"
+    - "dma_controller.sv"
+    - "tinydma_top.sv"
 
 pinout:
   ui[0]: "cfg_data[0]"

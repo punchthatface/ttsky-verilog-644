@@ -1,3 +1,0 @@
-[submodule "src/tinyDMA"]
-	path = src/tinyDMA
-	url = git@github.com:punchthatface/tinyDMA.git
