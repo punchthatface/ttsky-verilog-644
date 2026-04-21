@@ -6,16 +6,38 @@ from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles
 
 
+def set_uio_bit(value: int, bit: int, bitval: int) -> int:
+    if bitval:
+        return value | (1 << bit)
+    return value & ~(1 << bit)
+
+
+async def pulse_cfg(dut, data: int):
+    dut.ui_in.value = data
+    dut.uio_in.value = set_uio_bit(int(dut.uio_in.value), 0, 1)
+    await ClockCycles(dut.clk, 1)
+    dut.uio_in.value = set_uio_bit(int(dut.uio_in.value), 0, 0)
+    dut.ui_in.value = 0
+    await ClockCycles(dut.clk, 1)
+
+
+async def write_cfg_byte(dut, channel: int, field: int, byte_idx: int, data: int):
+    cmd = 0x80 | ((channel & 1) << 6) | ((field & 0x3) << 4) | ((byte_idx & 0x3) << 2)
+    await pulse_cfg(dut, cmd)
+    await pulse_cfg(dut, data)
+
+
+async def pulse_start(dut):
+    dut.uio_in.value = set_uio_bit(int(dut.uio_in.value), 1, 1)
+    await ClockCycles(dut.clk, 1)
+    dut.uio_in.value = set_uio_bit(int(dut.uio_in.value), 1, 0)
+
+
 @cocotb.test()
 async def test_project(dut):
-    dut._log.info("Start")
-
-    # Set the clock period to 10 us (100 KHz)
     clock = Clock(dut.clk, 10, unit="us")
     cocotb.start_soon(clock.start())
 
-    # Reset
-    dut._log.info("Reset")
     dut.ena.value = 1
     dut.ui_in.value = 0
     dut.uio_in.value = 0
@@ -23,18 +45,26 @@ async def test_project(dut):
     await ClockCycles(dut.clk, 10)
     dut.rst_n.value = 1
 
-    dut._log.info("Test project behavior")
+    await ClockCycles(dut.clk, 40)
 
-    # Set the input values you want to test
-    dut.ui_in.value = 20
-    dut.uio_in.value = 30
+    # Program channel 0 for a 4-byte incrementing transfer.
+    await write_cfg_byte(dut, 0, 0, 0, 0x10)
+    await write_cfg_byte(dut, 0, 0, 1, 0x00)
+    await write_cfg_byte(dut, 0, 0, 2, 0x00)
+    await write_cfg_byte(dut, 0, 1, 0, 0x20)
+    await write_cfg_byte(dut, 0, 1, 1, 0x00)
+    await write_cfg_byte(dut, 0, 1, 2, 0x00)
+    await write_cfg_byte(dut, 0, 2, 0, 0x04)
+    await write_cfg_byte(dut, 0, 2, 1, 0x00)
+    await write_cfg_byte(dut, 0, 3, 0, 0x07)
 
-    # Wait for one clock cycle to see the output values
-    await ClockCycles(dut.clk, 1)
+    await pulse_start(dut)
 
-    # The following assersion is just an example of how to check the output values.
-    # Change it to match the actual expected output of your module:
-    assert dut.uo_out.value == 50
+    for _ in range(2000):
+        await ClockCycles(dut.clk, 1)
+        if (int(dut.uo_out.value) >> 1) & 1:
+            break
+    else:
+        assert False, "done pulse not observed"
 
-    # Keep testing the module by changing the input values, waiting for
-    # one or more clock cycles, and asserting the expected output values.
+    assert ((int(dut.uo_out.value) >> 7) & 1) == 0, "wrapper error flag asserted"
