@@ -1,6 +1,6 @@
-module dma_scheduler
 import dma_pkg::*;
-(
+
+module dma_scheduler (
   input  logic                  clk,
   input  logic                  rst_n,
   input  logic                  grant_advance,

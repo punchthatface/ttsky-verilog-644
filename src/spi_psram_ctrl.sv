@@ -1,6 +1,6 @@
-module spi_psram_ctrl
 import dma_pkg::*;
-#(
+
+module spi_psram_ctrl #(
   parameter int RESET_CYCLES          = 20000,
   parameter int RESET_RECOVERY_CYCLES = 8
 )(
