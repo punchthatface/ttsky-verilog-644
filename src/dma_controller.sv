@@ -1,6 +1,6 @@
+module dma_controller
 import dma_pkg::*;
-
-module dma_controller (
+(
   input  logic                  clk,
   input  logic                  rst_n,
   input  logic                  sched_valid,

@@ -1,6 +1,6 @@
+module cfg_reg
 import dma_pkg::*;
-
-module cfg_reg #(
+#(
   parameter int N_REGS_PER_CH = 4
 ) (
   input  logic                                  clk,

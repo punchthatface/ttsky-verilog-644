@@ -1,6 +1,6 @@
+module tinydma_top
 import dma_pkg::*;
-
-module tinydma_top #(
+#(
   parameter int PSRAM_RESET_CYCLES          = 20000,
   parameter int PSRAM_RESET_RECOVERY_CYCLES = 8
 ) (

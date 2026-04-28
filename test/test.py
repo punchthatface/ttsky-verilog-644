@@ -29,8 +29,15 @@ UIO_SPI_CLK = 4
 UIO_SPI_MOSI = 5
 
 
+def value_to_int(value) -> int:
+    """Convert cocotb values while treating startup X/Z bits as 0."""
+    value_str = str(value).lower()
+    value_str = value_str.replace("x", "0").replace("z", "0")
+    return int(value_str, 2)
+
+
 def get_bit(value, bit: int) -> int:
-    return (int(value) >> bit) & 1
+    return (value_to_int(value) >> bit) & 1
 
 
 class UioInputDriver:
@@ -171,7 +178,7 @@ class SpiPsramModel:
     async def run(self):
         while True:
             await RisingEdge(self.dut.clk)
-            uio_out = int(self.dut.uio_out.value)
+            uio_out = value_to_int(self.dut.uio_out.value)
             cs_n = get_bit(uio_out, UIO_SPI_CS_N)
             sck = get_bit(uio_out, UIO_SPI_CLK)
             mosi = get_bit(uio_out, UIO_SPI_MOSI)
@@ -259,7 +266,8 @@ async def test_project(dut):
     await ClockCycles(dut.clk, 10)
 
     # Check fixed UIO directions: uio[3]=CS#, uio[4]=SCK, uio[5]=MOSI are outputs.
-    assert int(dut.uio_oe.value) == 0x38, f"unexpected uio_oe: 0x{int(dut.uio_oe.value):02x}"
+    uio_oe = value_to_int(dut.uio_oe.value)
+    assert uio_oe == 0x38, f"unexpected uio_oe: 0x{uio_oe:02x}"
 
     dut.rst_n.value = 1
 
