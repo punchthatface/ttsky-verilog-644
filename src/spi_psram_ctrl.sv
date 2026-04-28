@@ -192,16 +192,16 @@ module spi_psram_ctrl #(
           if (request_rw_reg) begin
             spi_tx_data = {
               SPI_CMD_WRITE,
-              1'b0,
-              request_addr_reg[22:0],
+              8'h00,
+              request_addr_reg[15:0],
               request_wdata_reg
             };
             spi_rx_en = 1'b0;
           end else begin
             spi_tx_data = {
               SPI_CMD_READ,
-              1'b0,
-              request_addr_reg[22:0],
+              8'h00,
+              request_addr_reg[15:0],
               8'h00
             };
             spi_rx_en = 1'b1;

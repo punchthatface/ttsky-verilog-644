@@ -243,18 +243,10 @@ async def pulse_cfg(dut, uio: UioInputDriver, data: int):
 async def write_cfg_byte(dut, uio: UioInputDriver, channel: int, field: int, byte_idx: int, data: int):
     cmd = 0x80 | ((channel & 1) << 6) | ((field & 0x3) << 4) | ((byte_idx & 0x3) << 2)
     await pulse_cfg(dut, uio, cmd)
-    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 1, (
-        f"cfg_pending did not assert after command byte "
-        f"ch={channel} field={field} byte={byte_idx} cmd=0x{cmd:02x} "
-        f"uo_out=0x{value_to_int(dut.uo_out.value):02x}"
-    )
+    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 1, "cfg_pending did not assert after command byte"
 
     await pulse_cfg(dut, uio, data)
-    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 0, (
-        f"cfg_pending did not clear after payload byte "
-        f"ch={channel} field={field} byte={byte_idx} data=0x{data & 0xFF:02x} "
-        f"uo_out=0x{value_to_int(dut.uo_out.value):02x}"
-    )
+    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 0, "cfg_pending did not clear after payload byte"
 
 
 async def write_cfg_word(dut, uio: UioInputDriver, channel: int, field: int, value: int, nbytes: int = 4):
@@ -336,11 +328,12 @@ async def test_project(dut):
         psram.write_mem(dst + i, 0x00)
 
     # Channel 0: src=0x10, dst=0x20, len=4, ctrl=arm + inc_src + inc_dst.
+    # Area-reduced RTL uses ADDR_W=16 and LEN_W=8, so write 2 address bytes and 1 length byte.
     # The TT adapter masks off CTRL bit 0 during config writes and applies it
     # later when uio[1] start is pulsed.
-    await write_cfg_word(dut, uio, 0, FIELD_SRC, src, nbytes=3)
-    await write_cfg_word(dut, uio, 0, FIELD_DST, dst, nbytes=3)
-    await write_cfg_word(dut, uio, 0, FIELD_LEN, len(pattern), nbytes=2)
+    await write_cfg_word(dut, uio, 0, FIELD_SRC, src, nbytes=2)
+    await write_cfg_word(dut, uio, 0, FIELD_DST, dst, nbytes=2)
+    await write_cfg_word(dut, uio, 0, FIELD_LEN, len(pattern), nbytes=1)
     await write_cfg_byte(dut, uio, 0, FIELD_CTRL, 0, 0x07)
 
     assert get_bit(dut.uo_out.value, UO_CFG_ERROR) == 0, "cfg_error remained set after valid config writes"

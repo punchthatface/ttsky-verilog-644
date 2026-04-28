@@ -1,9 +1,11 @@
 package dma_pkg;
 
   // Global parameters
-  parameter int ADDR_W = 24;   // Address width (PSRAM uses 24-bit address phase)
+  // TT-size build: keep the internal DMA address/length small for area.
+  // spi_psram_ctrl zero-extends ADDR_W to the PSRAM's 24-bit wire address phase.
+  parameter int ADDR_W = 16;
   parameter int DATA_W = 8;    // Data width (byte-level transfers)
-  parameter int LEN_W  = 16;   // Transfer length width (max number of bytes per DMA)
+  parameter int LEN_W  = 8;    // Transfer length width (max number of bytes per DMA)
   parameter int N_CH   = 2;    // Number of DMA channels
 
   // SPI command opcodes (from PSRAM datasheet)

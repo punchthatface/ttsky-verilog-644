@@ -223,7 +223,7 @@ module dma_controller (
           chan0_len_rem_next = chan0_len_rem - 1'b1;
           if (selected_state_inc_src) chan0_src_cur_next = chan0_src_cur + 1'b1;
           if (selected_state_inc_dst) chan0_dst_cur_next = chan0_dst_cur + 1'b1;
-          if (chan0_len_rem == 16'd1) begin
+          if (chan0_len_rem == {{(LEN_W-1){1'b0}}, 1'b1}) begin
             chan0_active_next = 1'b0;
             chan0_done_next   = 1'b1;
             state_next = DMA_COMPLETE;
@@ -234,7 +234,7 @@ module dma_controller (
           chan1_len_rem_next = chan1_len_rem - 1'b1;
           if (selected_state_inc_src) chan1_src_cur_next = chan1_src_cur + 1'b1;
           if (selected_state_inc_dst) chan1_dst_cur_next = chan1_dst_cur + 1'b1;
-          if (chan1_len_rem == 16'd1) begin
+          if (chan1_len_rem == {{(LEN_W-1){1'b0}}, 1'b1}) begin
             chan1_active_next = 1'b0;
             chan1_done_next   = 1'b1;
             state_next = DMA_COMPLETE;
