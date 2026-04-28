@@ -243,10 +243,18 @@ async def pulse_cfg(dut, uio: UioInputDriver, data: int):
 async def write_cfg_byte(dut, uio: UioInputDriver, channel: int, field: int, byte_idx: int, data: int):
     cmd = 0x80 | ((channel & 1) << 6) | ((field & 0x3) << 4) | ((byte_idx & 0x3) << 2)
     await pulse_cfg(dut, uio, cmd)
-    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 1, "cfg_pending did not assert after command byte"
+    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 1, (
+        f"cfg_pending did not assert after command byte "
+        f"ch={channel} field={field} byte={byte_idx} cmd=0x{cmd:02x} "
+        f"uo_out=0x{value_to_int(dut.uo_out.value):02x}"
+    )
 
     await pulse_cfg(dut, uio, data)
-    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 0, "cfg_pending did not clear after payload byte"
+    assert get_bit(dut.uo_out.value, UO_CFG_PENDING) == 0, (
+        f"cfg_pending did not clear after payload byte "
+        f"ch={channel} field={field} byte={byte_idx} data=0x{data & 0xFF:02x} "
+        f"uo_out=0x{value_to_int(dut.uo_out.value):02x}"
+    )
 
 
 async def write_cfg_word(dut, uio: UioInputDriver, channel: int, field: int, value: int, nbytes: int = 4):

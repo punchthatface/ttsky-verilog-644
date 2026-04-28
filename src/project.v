@@ -99,7 +99,8 @@ endmodule
 //
 // Area note: this module intentionally does not mirror all eight config
 // registers. It keeps only one in-progress assembly word plus tiny per-channel
-// control shadows needed for the external start pin.
+// control shadows needed for the external start pin. This preserves the original
+// 24-bit address / 16-bit length programming protocol.
 module tt_tinydma_cfg_adapter (
     input  wire        clk,
     input  wire        rst_n,
@@ -164,9 +165,9 @@ module tt_tinydma_cfg_adapter (
       begin
         case (reg_addr[1:0])
           FIELD_SRC,
-          FIELD_DST:  last_byte_for_reg = 2'd1; // ADDR_W = 16
-          FIELD_LEN,
-          FIELD_CTRL: last_byte_for_reg = 2'd0; // LEN_W = 8, CTRL uses low byte
+          FIELD_DST:  last_byte_for_reg = 2'd2; // ADDR_W = 24: bytes 0..2
+          FIELD_LEN:  last_byte_for_reg = 2'd1; // LEN_W = 16: bytes 0..1
+          FIELD_CTRL: last_byte_for_reg = 2'd0; // CTRL uses low byte
           default:    last_byte_for_reg = 2'd0;
         endcase
       end
