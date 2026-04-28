@@ -100,8 +100,8 @@ endmodule
 
 // Helper module to adapt the TT byte-stream config protocol to the
 // DMA core's register-based config interface.
-// Basically a little hack that allows us to mimic real DMA interface with the
-// limited TT pinout.
+// Adapts the byte-stream TT input protocol to the DMA core's
+// internal register-based configuration interface.
 module tt_tinydma_cfg_adapter (
     input  wire        clk,
     input  wire        rst_n,
