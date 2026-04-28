@@ -1,7 +1,7 @@
 /*
  * Tiny Tapeout wrapper for TinyDMA.
  *
- * tt_um_akim_tinydma owns only the TT pin wiring and module instances.
+ * tt_um_akim_tinydma owns the TT pin wiring and module instances.
  * tt_tinydma_cfg_adapter contains the TT-specific byte-stream config protocol.
  */
 
@@ -43,21 +43,17 @@ module tt_um_akim_tinydma (
     tt_tinydma_cfg_adapter u_tt_tinydma_cfg_adapter (
       .clk        (clk),
       .rst_n      (rst_n),
-
       .ui_in      (ui_in),
       .cfg_valid  (cfg_valid),
       .start      (start),
-
       .cfg_we     (cfg_we),
       .cfg_re     (cfg_re),
       .cfg_addr   (cfg_addr),
       .cfg_wdata  (cfg_wdata),
       .cfg_rdata  (cfg_rdata),
-
       .dma_busy   (dma_busy),
       .chan_active(chan_active),
       .chan_done  (chan_done),
-
       .uo_out     (uo_out)
     );
 
@@ -98,10 +94,12 @@ module tt_um_akim_tinydma (
 endmodule
 
 
-// Helper module to adapt the TT byte-stream config protocol to the
-// DMA core's register-based config interface.
 // Adapts the byte-stream TT input protocol to the DMA core's
 // internal register-based configuration interface.
+//
+// Area note: this module intentionally does not mirror all eight config
+// registers. It keeps only one in-progress assembly word plus tiny per-channel
+// control shadows needed for the external start pin.
 module tt_tinydma_cfg_adapter (
     input  wire        clk,
     input  wire        rst_n,
@@ -132,15 +130,11 @@ module tt_tinydma_cfg_adapter (
     localparam logic [1:0] FIELD_LEN  = 2'd2;
     localparam logic [1:0] FIELD_CTRL = 2'd3;
 
-    logic [31:0] reg0_shadow;
-    logic [31:0] reg1_shadow;
-    logic [31:0] reg2_shadow;
-    logic [31:0] reg3_shadow;
-    logic [31:0] reg4_shadow;
-    logic [31:0] reg5_shadow;
-    logic [31:0] reg6_shadow;
-    logic [31:0] reg7_shadow;
+    logic [31:0] assemble_word;
+    logic [2:0]  assemble_addr;
 
+    logic [2:0]  ch0_ctrl_shadow;
+    logic [2:0]  ch1_ctrl_shadow;
     logic        ch0_arm;
     logic        ch1_arm;
 
@@ -164,6 +158,20 @@ module tt_tinydma_cfg_adapter (
       end
     endfunction
 
+    function automatic [1:0] last_byte_for_reg(
+      input logic [2:0] reg_addr
+    );
+      begin
+        case (reg_addr[1:0])
+          FIELD_SRC,
+          FIELD_DST:  last_byte_for_reg = 2'd1; // ADDR_W = 16
+          FIELD_LEN,
+          FIELD_CTRL: last_byte_for_reg = 2'd0; // LEN_W = 8, CTRL uses low byte
+          default:    last_byte_for_reg = 2'd0;
+        endcase
+      end
+    endfunction
+
     function automatic [31:0] update_byte(
       input logic [31:0] original,
       input logic [1:0]  byte_idx,
@@ -182,16 +190,25 @@ module tt_tinydma_cfg_adapter (
       end
     endfunction
 
+    logic [2:0]  cmd_reg_addr;
+    logic [31:0] updated_word;
+    logic [7:0]  payload_byte;
+
+    always_comb begin
+      cmd_reg_addr = cmd_to_reg_addr(ui_in[6], ui_in[5:4]);
+      payload_byte = ui_in;
+      if (pending_reg_addr[1:0] == FIELD_CTRL) begin
+        payload_byte = {ui_in[7:1], 1'b0};
+      end
+      updated_word = update_byte(assemble_word, pending_byte_idx, payload_byte);
+    end
+
     always_ff @(posedge clk, negedge rst_n) begin
       if (!rst_n) begin
-        reg0_shadow       <= 32'h0000_0000;
-        reg1_shadow       <= 32'h0000_0000;
-        reg2_shadow       <= 32'h0000_0000;
-        reg3_shadow       <= 32'h0000_0000;
-        reg4_shadow       <= 32'h0000_0000;
-        reg5_shadow       <= 32'h0000_0000;
-        reg6_shadow       <= 32'h0000_0000;
-        reg7_shadow       <= 32'h0000_0000;
+        assemble_word     <= 32'h0000_0000;
+        assemble_addr     <= 3'b000;
+        ch0_ctrl_shadow   <= 3'b000;
+        ch1_ctrl_shadow   <= 3'b000;
         ch0_arm           <= 1'b0;
         ch1_arm           <= 1'b0;
         pending_data      <= 1'b0;
@@ -225,79 +242,45 @@ module tt_tinydma_cfg_adapter (
           error_flag <= 1'b0;
 
           if (!pending_data) begin
-            if (ui_in[7]) begin
-              pending_reg_addr <= cmd_to_reg_addr(ui_in[6], ui_in[5:4]);
+            if (ui_in[7] && (ui_in[3:2] <= last_byte_for_reg(cmd_reg_addr))) begin
+              pending_reg_addr <= cmd_reg_addr;
               pending_byte_idx <= ui_in[3:2];
               pending_data     <= 1'b1;
+
+              if ((ui_in[3:2] == 2'd0) || (cmd_reg_addr != assemble_addr)) begin
+                assemble_word <= 32'h0000_0000;
+                assemble_addr <= cmd_reg_addr;
+              end
             end else begin
               error_flag <= 1'b1;
             end
           end else begin
-            pending_data <= 1'b0;
-            cfg_we       <= 1'b1;
-            cfg_addr     <= pending_reg_addr;
+            pending_data  <= 1'b0;
+            assemble_word <= updated_word;
 
-            case (pending_reg_addr)
-              3'd0: begin
-                reg0_shadow <= update_byte(reg0_shadow, pending_byte_idx, ui_in);
-                cfg_wdata   <= update_byte(reg0_shadow, pending_byte_idx, ui_in);
-              end
+            if (pending_byte_idx == last_byte_for_reg(pending_reg_addr)) begin
+              cfg_we    <= 1'b1;
+              cfg_addr  <= pending_reg_addr;
+              cfg_wdata <= updated_word;
 
-              3'd1: begin
-                reg1_shadow <= update_byte(reg1_shadow, pending_byte_idx, ui_in);
-                cfg_wdata   <= update_byte(reg1_shadow, pending_byte_idx, ui_in);
+              if (pending_reg_addr == 3'd3) begin
+                ch0_arm         <= ui_in[0];
+                ch0_ctrl_shadow <= {ui_in[2], ui_in[1], 1'b0};
+              end else if (pending_reg_addr == 3'd7) begin
+                ch1_arm         <= ui_in[0];
+                ch1_ctrl_shadow <= {ui_in[2], ui_in[1], 1'b0};
               end
-
-              3'd2: begin
-                reg2_shadow <= update_byte(reg2_shadow, pending_byte_idx, ui_in);
-                cfg_wdata   <= update_byte(reg2_shadow, pending_byte_idx, ui_in);
-              end
-
-              3'd3: begin
-                reg3_shadow <= update_byte(reg3_shadow, pending_byte_idx, {ui_in[7:1], 1'b0});
-                cfg_wdata   <= update_byte(reg3_shadow, pending_byte_idx, {ui_in[7:1], 1'b0});
-                if (pending_byte_idx == 2'd0) begin
-                  ch0_arm <= ui_in[0];
-                end
-              end
-
-              3'd4: begin
-                reg4_shadow <= update_byte(reg4_shadow, pending_byte_idx, ui_in);
-                cfg_wdata   <= update_byte(reg4_shadow, pending_byte_idx, ui_in);
-              end
-
-              3'd5: begin
-                reg5_shadow <= update_byte(reg5_shadow, pending_byte_idx, ui_in);
-                cfg_wdata   <= update_byte(reg5_shadow, pending_byte_idx, ui_in);
-              end
-
-              3'd6: begin
-                reg6_shadow <= update_byte(reg6_shadow, pending_byte_idx, ui_in);
-                cfg_wdata   <= update_byte(reg6_shadow, pending_byte_idx, ui_in);
-              end
-
-              3'd7: begin
-                reg7_shadow <= update_byte(reg7_shadow, pending_byte_idx, {ui_in[7:1], 1'b0});
-                cfg_wdata   <= update_byte(reg7_shadow, pending_byte_idx, {ui_in[7:1], 1'b0});
-                if (pending_byte_idx == 2'd0) begin
-                  ch1_arm <= ui_in[0];
-                end
-              end
-
-              default: begin
-                cfg_wdata <= 32'h0000_0000;
-              end
-            endcase
+            end
           end
         end else if (start_pending_ch0) begin
           cfg_we            <= 1'b1;
           cfg_addr          <= 3'd3;
-          cfg_wdata         <= reg3_shadow | 32'h0000_0001;
+          cfg_wdata         <= {29'd0, (ch0_ctrl_shadow | 3'b001)};
           start_pending_ch0 <= 1'b0;
         end else if (start_pending_ch1) begin
           cfg_we            <= 1'b1;
           cfg_addr          <= 3'd7;
-          cfg_wdata         <= reg7_shadow | 32'h0000_0001;
+          cfg_wdata         <= {29'd0, (ch1_ctrl_shadow | 3'b001)};
           start_pending_ch1 <= 1'b0;
         end
       end
