@@ -47,7 +47,7 @@ module spi_master #(
   assign spi_sck  = spi_sck_reg;
   assign spi_mosi = spi_mosi_reg;
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk, negedge rst_n) begin
     if (!rst_n) begin
       state         <= ST_IDLE;
       tx_shift_reg  <= '0;

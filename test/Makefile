@@ -6,7 +6,15 @@ SIM ?= icarus
 FST ?= -fst # Use more efficient FST format
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
-PROJECT_SOURCES = project.v RangeFinder.sv
+PROJECT_SOURCES = \
+	project.v \
+	dma_pkg.sv \
+	spi_master.sv \
+	spi_psram_ctrl.sv \
+	cfg_reg.sv \
+	dma_scheduler.sv \
+	dma_controller.sv \
+	tinydma_top.sv
 
 ifneq ($(GATES),yes)
 

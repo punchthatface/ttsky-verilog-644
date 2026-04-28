@@ -81,7 +81,7 @@ module spi_psram_ctrl #(
     .spi_miso (spi_miso)
   );
 
-  always_ff @(posedge clk or negedge rst_n) begin
+  always_ff @(posedge clk, negedge rst_n) begin
     if (!rst_n) begin
       state             <= ST_POWER_UP_WAIT;
       delay_count       <= '0;
