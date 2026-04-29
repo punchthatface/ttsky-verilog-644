@@ -4,22 +4,23 @@ module spi_psram_ctrl #(
   parameter int RESET_CYCLES          = 20000,
   parameter int RESET_RECOVERY_CYCLES = 8
 )(
+  // Clock and active-low reset.
   input  logic              clk,
   input  logic              rst_n,
 
-  // Request interface from DMA / top-level logic
+  // Request interface from DMA/top-level logic.
   input  logic              req_valid,
   input  logic              req_rw,       // 0 = read, 1 = write
   input  logic [ADDR_W-1:0] req_addr,
   input  logic [DATA_W-1:0] req_wdata,
   output logic              req_ready,
 
-  // Response interface back to DMA / top-level logic
+  // Response interface back to DMA/top-level logic.
   output logic              rsp_valid,
   output logic [DATA_W-1:0] rsp_rdata,
   output logic              busy,
 
-  // External SPI pins to PSRAM
+  // External SPI pins to PSRAM.
   output logic              spi_clk,
   output logic              spi_cs_n,
   output logic              spi_mosi,
@@ -28,6 +29,8 @@ module spi_psram_ctrl #(
 
   localparam logic [7:0] SPI_CMD_RESET_ENABLE = 8'h66;
   localparam logic [7:0] SPI_CMD_RESET         = 8'h99;
+
+  // 8-bit command + 24-bit address/dummy field + 8-bit data/dummy byte.
   localparam int SPI_FRAME_W = 40;
 
   typedef enum logic [3:0] {
@@ -46,16 +49,19 @@ module spi_psram_ctrl #(
 
   logic [15:0] delay_count, delay_count_next;
 
+  // Latch requests before handing them to spi_master. The DMA address is kept
+  // at ADDR_W internally and zero-extended to the PSRAM 24-bit address field.
   logic [ADDR_W-1:0] request_addr_reg,  request_addr_reg_next;
   logic [DATA_W-1:0] request_wdata_reg, request_wdata_reg_next;
   logic              request_rw_reg,    request_rw_reg_next;
 
-  logic                 spi_start;
-  logic [5:0]           spi_nbits;
+  // One-shot command interface into the bit-level SPI engine.
+  logic                   spi_start;
+  logic [5:0]             spi_nbits;
   logic [SPI_FRAME_W-1:0] spi_tx_data;
-  logic                 spi_rx_en;
-  logic                 spi_done;
-  logic                 spi_busy;
+  logic                   spi_rx_en;
+  logic                   spi_done;
+  logic                   spi_busy;
   logic [SPI_FRAME_W-1:0] spi_rx_data;
 
   logic              req_ready_next;
@@ -124,6 +130,7 @@ module spi_psram_ctrl #(
 
     case (state)
       ST_POWER_UP_WAIT: begin
+        // APS6404L needs a quiet period after power-up before reset/access.
         if (delay_count == RESET_CYCLES - 1) begin
           delay_count_next = '0;
           state_next       = ST_SEND_RESET_ENABLE;
@@ -133,6 +140,7 @@ module spi_psram_ctrl #(
       end
 
       ST_SEND_RESET_ENABLE: begin
+        // PSRAM reset is a two-command sequence: 66h, then 99h.
         if (!spi_busy) begin
           spi_start   = 1'b1;
           spi_nbits   = 6'd8;
@@ -176,6 +184,8 @@ module spi_psram_ctrl #(
         req_ready_next = 1'b1;
         busy_next      = 1'b0;
 
+        // Accept one byte request and run it to completion before accepting
+        // the next request.
         if (req_valid) begin
           request_addr_reg_next  = req_addr;
           request_wdata_reg_next = req_wdata;
@@ -189,6 +199,8 @@ module spi_psram_ctrl #(
           spi_start = 1'b1;
           spi_nbits = 6'd40;
 
+          // Standard SPI commands use a 24-bit address. Our area-reduced DMA
+          // currently drives the lower 16 bits and leaves the upper byte zero.
           if (request_rw_reg) begin
             spi_tx_data = {
               SPI_CMD_WRITE,
@@ -214,6 +226,7 @@ module spi_psram_ctrl #(
       ST_WAIT_ACCESS: begin
         if (spi_done) begin
           if (!request_rw_reg) begin
+            // During reads, the final received byte is the data byte.
             rsp_valid_next = 1'b1;
             rsp_rdata_next = spi_rx_data[7:0];
           end

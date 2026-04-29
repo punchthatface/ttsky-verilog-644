@@ -1,22 +1,26 @@
 module spi_master #(
   parameter int MAX_BITS = 40
 )(
-  input  logic                  clk,
-  input  logic                  rst_n,
+  // Clock and active-low reset.
+  input  logic                clk,
+  input  logic                rst_n,
 
-  input  logic                  start,
-  input  logic [5:0]            nbits,
-  input  logic [MAX_BITS-1:0]   tx_data,
-  input  logic                  rx_en,
+  // Transaction command. tx_data is sent MSB-first for nbits bits.
+  input  logic                start,
+  input  logic [5:0]          nbits,
+  input  logic [MAX_BITS-1:0] tx_data,
+  input  logic                rx_en,
 
-  output logic                  busy,
-  output logic                  done,
-  output logic [MAX_BITS-1:0]   rx_data,
+  // Transaction status and received shift register.
+  output logic                busy,
+  output logic                done,
+  output logic [MAX_BITS-1:0] rx_data,
 
-  output logic                  spi_cs_n,
-  output logic                  spi_sck,
-  output logic                  spi_mosi,
-  input  logic                  spi_miso
+  // SPI mode 0 pins: data changes while SCK is low, sampled on high.
+  output logic                spi_cs_n,
+  output logic                spi_sck,
+  output logic                spi_mosi,
+  input  logic                spi_miso
 );
 
   typedef enum logic [2:0] {
@@ -98,6 +102,7 @@ module spi_master #(
         busy_next         = 1'b0;
 
         if (start) begin
+          // Align the requested frame to the MSB end of the fixed-size shifter.
           tx_shift_reg_next = tx_data << (MAX_BITS - nbits);
           rx_shift_reg_next = '0;
           bits_left_next    = nbits;
@@ -109,6 +114,8 @@ module spi_master #(
       end
 
       ST_BIT_SETUP: begin
+        // Present MOSI while SCK is low so the target can sample on the
+        // following rising edge.
         spi_sck_reg_next  = 1'b0;
         spi_mosi_reg_next = tx_shift_reg[MAX_BITS-1];
         state_next        = ST_BIT_HIGH;
@@ -117,12 +124,14 @@ module spi_master #(
       ST_BIT_HIGH: begin
         spi_sck_reg_next = 1'b1;
         if (rx_en_reg) begin
+          // Mode 0: sample MISO on the rising/high phase.
           rx_shift_reg_next = {rx_shift_reg[MAX_BITS-2:0], spi_miso};
         end
         state_next = ST_BIT_LOW;
       end
 
       ST_BIT_LOW: begin
+        // Drop SCK and shift to the next transmit bit.
         spi_sck_reg_next  = 1'b0;
         spi_mosi_reg_next = 1'b0;
         tx_shift_reg_next = {tx_shift_reg[MAX_BITS-2:0], 1'b0};

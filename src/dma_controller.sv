@@ -1,51 +1,70 @@
 import dma_pkg::*;
 
 module dma_controller (
-  input  logic                  clk,
-  input  logic                  rst_n,
-  input  logic                  sched_valid,
+  // Clock and active-low reset.
+  input  logic                    clk,
+  input  logic                    rst_n,
+
+  // Scheduler request/grant interface.
+  input  logic                    sched_valid,
   input  logic [$clog2(N_CH)-1:0] sched_idx,
-  output logic                  sched_advance,
-  input  logic [ADDR_W-1:0]     cfg0_src_base,
-  input  logic [ADDR_W-1:0]     cfg0_dst_base,
-  input  logic [LEN_W-1:0]      cfg0_len,
-  input  logic                  cfg0_inc_src,
-  input  logic                  cfg0_inc_dst,
-  input  logic [ADDR_W-1:0]     cfg1_src_base,
-  input  logic [ADDR_W-1:0]     cfg1_dst_base,
-  input  logic [LEN_W-1:0]      cfg1_len,
-  input  logic                  cfg1_inc_src,
-  input  logic                  cfg1_inc_dst,
-  output logic [N_CH-1:0]       start_clear,
-  output logic [ADDR_W-1:0]     chan0_src_cur,
-  output logic [ADDR_W-1:0]     chan0_dst_cur,
-  output logic [LEN_W-1:0]      chan0_len_rem,
-  output logic                  chan0_inc_src,
-  output logic                  chan0_inc_dst,
-  output logic                  chan0_active,
-  output logic                  chan0_done,
-  output logic [ADDR_W-1:0]     chan1_src_cur,
-  output logic [ADDR_W-1:0]     chan1_dst_cur,
-  output logic [LEN_W-1:0]      chan1_len_rem,
-  output logic                  chan1_inc_src,
-  output logic                  chan1_inc_dst,
-  output logic                  chan1_active,
-  output logic                  chan1_done,
-  output logic                  mem_req_valid,
-  output logic                  mem_req_rw,
-  output logic [ADDR_W-1:0]     mem_req_addr,
-  output logic [DATA_W-1:0]     mem_req_wdata,
-  input  logic                  mem_rsp_ready,
-  input  logic                  mem_rsp_valid,
-  input  logic [DATA_W-1:0]     mem_rsp_rdata
+  output logic                    sched_advance,
+
+  // Decoded channel 0 configuration from cfg_reg.
+  input  logic [ADDR_W-1:0]       cfg0_src_base,
+  input  logic [ADDR_W-1:0]       cfg0_dst_base,
+  input  logic [LEN_W-1:0]        cfg0_len,
+  input  logic                    cfg0_inc_src,
+  input  logic                    cfg0_inc_dst,
+
+  // Decoded channel 1 configuration from cfg_reg.
+  input  logic [ADDR_W-1:0]       cfg1_src_base,
+  input  logic [ADDR_W-1:0]       cfg1_dst_base,
+  input  logic [LEN_W-1:0]        cfg1_len,
+  input  logic                    cfg1_inc_src,
+  input  logic                    cfg1_inc_dst,
+
+  // Clears cfg_reg start bits once the controller accepts a channel.
+  output logic [N_CH-1:0]         start_clear,
+
+  // Channel 0 runtime state/status.
+  output logic [ADDR_W-1:0]       chan0_src_cur,
+  output logic [ADDR_W-1:0]       chan0_dst_cur,
+  output logic [LEN_W-1:0]        chan0_len_rem,
+  output logic                    chan0_inc_src,
+  output logic                    chan0_inc_dst,
+  output logic                    chan0_active,
+  output logic                    chan0_done,
+
+  // Channel 1 runtime state/status.
+  output logic [ADDR_W-1:0]       chan1_src_cur,
+  output logic [ADDR_W-1:0]       chan1_dst_cur,
+  output logic [LEN_W-1:0]        chan1_len_rem,
+  output logic                    chan1_inc_src,
+  output logic                    chan1_inc_dst,
+  output logic                    chan1_active,
+  output logic                    chan1_done,
+
+  // Byte-wide memory request/response interface.
+  output logic                    mem_req_valid,
+  output logic                    mem_req_rw,
+  output logic [ADDR_W-1:0]       mem_req_addr,
+  output logic [DATA_W-1:0]       mem_req_wdata,
+  input  logic                    mem_rsp_ready,
+  input  logic                    mem_rsp_valid,
+  input  logic [DATA_W-1:0]       mem_rsp_rdata
 );
 
+  // Keep the state storage as plain logic for tool compatibility; the values
+  // still come from dma_state_t constants in dma_pkg.
   logic [3:0] state, state_next;
 
   logic active_ch, active_ch_next;
   logic [DATA_W-1:0] read_data_reg, read_data_reg_next;
   logic write_busy_seen, write_busy_seen_next;
 
+  // Flattened per-channel state. This used to be a natural struct, but the
+  // TinyTapeout/Yosys flow is happier with explicit scalar/vector signals.
   logic [ADDR_W-1:0] chan0_src_cur_next, chan0_dst_cur_next;
   logic [LEN_W-1:0]  chan0_len_rem_next;
   logic              chan0_inc_src_next, chan0_inc_dst_next, chan0_active_next, chan0_done_next;
@@ -149,6 +168,8 @@ module dma_controller (
         sched_advance = 1'b1;
         start_clear[active_ch] = 1'b1;
 
+        // Snapshot the selected channel's configuration into runtime state.
+        // Later config writes should not disturb an already-running transfer.
         if (!active_ch) begin
           chan0_src_cur_next = cfg0_src_base;
           chan0_dst_cur_next = cfg0_dst_base;
@@ -211,6 +232,9 @@ module dma_controller (
       end
 
       DMA_WAIT_WRITE: begin
+        // Writes do not return data. The PSRAM controller presents ready while
+        // idle, drops it while the SPI transaction is active, then raises it
+        // again when the write has completed.
         if (!write_busy_seen) begin
           if (!mem_rsp_ready) write_busy_seen_next = 1'b1;
         end else if (mem_rsp_ready) begin
@@ -219,6 +243,8 @@ module dma_controller (
       end
 
       DMA_UPDATE_STATE: begin
+        // One byte was copied. Update only the active channel's pointers and
+        // remaining count; the other channel's state is preserved.
         if (!active_ch) begin
           chan0_len_rem_next = chan0_len_rem - 1'b1;
           if (selected_state_inc_src) chan0_src_cur_next = chan0_src_cur + 1'b1;

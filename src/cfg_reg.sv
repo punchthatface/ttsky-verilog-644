@@ -3,28 +3,37 @@ import dma_pkg::*;
 module cfg_reg #(
   parameter int N_REGS_PER_CH = 4
 ) (
-  input  logic                                  clk,
-  input  logic                                  rst_n,
-  input  logic                                  cfg_we,
-  input  logic                                  cfg_re,
+  // Clock and active-low reset.
+  input  logic                                   clk,
+  input  logic                                   rst_n,
+
+  // Simple register access port.
+  input  logic                                   cfg_we,
+  input  logic                                   cfg_re,
   input  logic [$clog2(N_CH*N_REGS_PER_CH)-1:0] cfg_addr,
-  input  logic [31:0]                           cfg_wdata,
-  output logic [31:0]                           cfg_rdata,
-  input  logic [N_CH-1:0]                       start_clear,
-  input  logic [N_CH-1:0]                       chan_active,
-  input  logic [N_CH-1:0]                       chan_done,
-  output logic [ADDR_W-1:0]                     cfg0_src_base,
-  output logic [ADDR_W-1:0]                     cfg0_dst_base,
-  output logic [LEN_W-1:0]                      cfg0_len,
-  output logic                                  cfg0_inc_src,
-  output logic                                  cfg0_inc_dst,
-  output logic                                  cfg0_start_en,
-  output logic [ADDR_W-1:0]                     cfg1_src_base,
-  output logic [ADDR_W-1:0]                     cfg1_dst_base,
-  output logic [LEN_W-1:0]                      cfg1_len,
-  output logic                                  cfg1_inc_src,
-  output logic                                  cfg1_inc_dst,
-  output logic                                  cfg1_start_en
+  input  logic [31:0]                            cfg_wdata,
+  output logic [31:0]                            cfg_rdata,
+
+  // Runtime status/control handshake from the DMA controller.
+  input  logic [N_CH-1:0]                        start_clear,
+  input  logic [N_CH-1:0]                        chan_active,
+  input  logic [N_CH-1:0]                        chan_done,
+
+  // Channel 0 decoded configuration.
+  output logic [ADDR_W-1:0]                      cfg0_src_base,
+  output logic [ADDR_W-1:0]                      cfg0_dst_base,
+  output logic [LEN_W-1:0]                       cfg0_len,
+  output logic                                   cfg0_inc_src,
+  output logic                                   cfg0_inc_dst,
+  output logic                                   cfg0_start_en,
+
+  // Channel 1 decoded configuration.
+  output logic [ADDR_W-1:0]                      cfg1_src_base,
+  output logic [ADDR_W-1:0]                      cfg1_dst_base,
+  output logic [LEN_W-1:0]                       cfg1_len,
+  output logic                                   cfg1_inc_src,
+  output logic                                   cfg1_inc_dst,
+  output logic                                   cfg1_start_en
 );
 
   localparam int REG_SRC  = 0;
@@ -32,6 +41,8 @@ module cfg_reg #(
   localparam int REG_LEN  = 2;
   localparam int REG_CTRL = 3;
 
+  // Address map per channel:
+  //   0: source base, 1: destination base, 2: length, 3: control/status.
   logic channel_sel;
   logic [1:0] reg_sel;
 
@@ -53,9 +64,12 @@ module cfg_reg #(
       cfg1_inc_dst  <= 1'b0;
       cfg1_start_en <= 1'b0;
     end else begin
+      // The controller pulses start_clear once it has accepted a channel.
+      // This turns the start bit into a request latch instead of a sticky bit.
       if (start_clear[0]) cfg0_start_en <= 1'b0;
       if (start_clear[1]) cfg1_start_en <= 1'b0;
 
+      // cfg_addr[2] selects the channel, cfg_addr[1:0] selects the register.
       if (cfg_we) begin
         case (channel_sel)
           1'b0: begin
@@ -93,6 +107,8 @@ module cfg_reg #(
     cfg_rdata = 32'h0000_0000;
 
     if (cfg_re) begin
+      // Status bits share the control register so software can poll progress
+      // without needing a separate status address.
       case (channel_sel)
         1'b0: begin
           case (reg_sel)
