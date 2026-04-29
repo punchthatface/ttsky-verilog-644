@@ -8,13 +8,13 @@ from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 
 
-# TT wrapper protocol fields. These mirror project.v / tt_tinydma_cfg_adapter.
+# TT wrapper protocol fields. These mirror tt_um_akim_tinydma.v / tt_tinydma_cfg_adapter.
 FIELD_SRC = 0
 FIELD_DST = 1
 FIELD_LEN = 2
 FIELD_CTRL = 3
 
-# uo_out status bits from project.v
+# uo_out status bits from tt_um_akim_tinydma.v
 UO_DMA_ACTIVE = 0
 UO_DONE_PULSE = 1
 UO_CH0_DONE = 2
@@ -24,7 +24,7 @@ UO_CH1_ACTIVE = 5
 UO_CFG_PENDING = 6
 UO_CFG_ERROR = 7
 
-# uio pin mapping from project.v / info.yaml
+# uio pin mapping from tt_um_akim_tinydma.v / info.yaml
 UIO_CFG_VALID = 0
 UIO_START = 1
 UIO_SPI_MISO = 2

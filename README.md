@@ -1,42 +1,40 @@
 ![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
 
-# Tiny Tapeout Verilog Project Template
+# TinyDMA-2C
 
-- [Read the documentation for project](docs/info.md)
+TinyDMA-2C is a two-channel byte DMA engine for Tiny Tapeout. It moves bytes between addresses in an external SPI PSRAM device using a small scheduler, a DMA controller, and a single-bit SPI memory controller.
 
-## What is Tiny Tapeout?
+Tiny Tapeout is an educational shuttle project for fabricating small open-source ASIC designs. This repository contains the RTL, tests, and project metadata for the TinyDMA-2C submission.
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+The design was built for a `1x2` Tiny Tapeout tile allocation. To fit that target, the submitted build uses 16-bit internal addresses and 8-bit transfer lengths. The PSRAM controller still emits the normal SPI command format with a 24-bit address phase; the upper address byte is driven as zero.
 
-To learn more and get started, visit https://tinytapeout.com.
+## Interface
 
-## Set up your Verilog project
+Configuration uses `ui_in[7:0]` as a byte-wide command/data bus. `uio_in[0]` is the config-valid strobe, and `uio_in[1]` starts any armed channel.
 
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
+The external PSRAM connects through UIO pins:
 
-The GitHub action will automatically build the ASIC files using [LibreLane](https://www.zerotoasiccourse.com/terminology/librelane/).
+- `uio[2]`: SPI MISO input
+- `uio[3]`: SPI chip select output, active low
+- `uio[4]`: SPI clock output
+- `uio[5]`: SPI MOSI output
 
-## Enable GitHub actions to build the results page
+Status is reported on `uo_out`, including active/done flags for both DMA channels and configuration adapter status.
 
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
+More detail is in [docs/info.md](docs/info.md).
 
-## Resources
+## Verification
 
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
+The project has been tested with:
 
-## What next?
+- cocotb tests for the Tiny Tapeout wrapper and SPI PSRAM model
+- RTL simulations for the SPI master, PSRAM controller, DMA subsystem, and top-level DMA path
+- FPGA bring-up against a real QSPI PSRAM PMOD
+- FPGA tests that drive the actual Tiny Tapeout-style IO wrapper
+- UART-driven FPGA scripts covering raw PSRAM access, channel 0 copy, channel 1 fixed-source fill, fixed-destination behavior, zero-length transfer, and a longer 16-byte transfer
 
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
-  - Bluesky [@tinytapeout.com](https://bsky.app/profile/tinytapeout.com)
+The GitHub Actions `test` and `gds` flows have passed for this repository.
+
+## Source
+
+The Tiny Tapeout top module is `tt_um_akim_tinydma` in [src/tt_um_akim_tinydma.v](src/tt_um_akim_tinydma.v). The core RTL is split across the DMA configuration register file, scheduler, controller, SPI master, PSRAM controller, and top-level integration modules in `src/`.
